@@ -96,37 +96,54 @@ class _StatusListener(object):
         self._consumer = BusConsumer(bus_config)
         self._consumer.connect()
 
-        self._consumer.add_binding(
-            self.queue_agent_status_update,
-            'agent-status-updates',
-            notifier_config['exchange_name'],
-            routing_keys['agent_status'],
-        )
-        self._consumer.add_binding(
-            self.queue_endpoint_status_update,
-            'endpoint-status-updates',
-            notifier_config['exchange_name'],
-            routing_keys['endpoint_status'],
-        )
-        self._consumer.add_binding(
-            self.queue_user_status_update,
-            'user-status-updates',
-            notifier_config['exchange_name'],
-            routing_keys['user_status'],
-        )
+        # self._consumer.add_binding(
+        #     self.queue_agent_status_update,
+        #     'agent-status-updates',
+        #     notifier_config['exchange_name'],
+        #     routing_keys['agent_status'],
+        # )
+        # self._consumer.add_binding(
+        #     self.queue_endpoint_status_update,
+        #     'endpoint-status-updates',
+        #     notifier_config['exchange_name'],
+        #     routing_keys['endpoint_status'],
+        # )
+        # self._consumer.add_binding(
+        #     self.queue_user_status_update,
+        #     'user-status-updates',
+        #     notifier_config['exchange_name'],
+        #     routing_keys['user_status'],
+        # )
+        queue = self._consumer.channel.queue_declare(exclusive=True, durable=False).method.queue
+        self._consumer.channel.queue_bind(queue, exchange='xivo', routing_key='status.user')
+        self._consumer.channel.queue_bind(queue, exchange='xivo', routing_key='status.endpoint')
+        self._consumer.channel.queue_bind(queue, exchange='xivo', routing_key='status.agent')
+        self._consumer.channel.basic_consume(self.on_status_update, queue)
 
-        self._consumer.run()
+        self._consumer.channel.start_consuming()
 
     def __delete__(self):
         self._consumer.stop()
 
+    def on_status_update(self, channel, method, header, body):
+        body = self._consumer._marshaler.unmarshal_message(body)
+        if body['name'] == 'user_status_update':
+            self.queue_user_status_update(body)
+        if body['name'] == 'endpoint_status_update':
+            self.queue_endpoint_status_update(body)
+        if body['name'] == 'agent_status_update':
+            self.queue_agent_status_update(body)
+
     def queue_agent_status_update(self, event):
+        logger.info('%%%%%%%%%%%%%% agent %%%%%%%%%%%%%%%%%')
         self._task_queue.put(self._forwarder.on_agent_status_update, event)
 
     def queue_endpoint_status_update(self, event):
+        logger.info('%%%%%%%%%%%%%%% endpoint %%%%%%%%%%%%%%%%')
         self._task_queue.put(self._forwarder.on_endpoint_status_update, event)
 
     def queue_user_status_update(self, event):
+        logger.info('%%%%%%%%%%%%%% user %%%%%%%%%%%%%%%%%')
         self._task_queue.put(self._forwarder.on_user_status_update, event)
 
 
